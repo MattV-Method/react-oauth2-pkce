@@ -19,6 +19,7 @@ export interface AuthTokens {
   id_token: string
   access_token: string
   refresh_token: string
+  expires_at: number
   expires_in: number
   token_type: string
 }
@@ -215,7 +216,8 @@ export class AuthService<TIDToken = JWTIDToken> {
       body: toUrlEncoded(payload)
     })
     this.removeItem('pkce')
-    const json = await response.json()
+    const json = await response.json();
+    json.expires_at = Date.now() + (json.expires_in * 1000);
     this.setAuthTokens(json as AuthTokens)
     if (autoRefresh) {
       this.startTimer()
@@ -230,9 +232,10 @@ export class AuthService<TIDToken = JWTIDToken> {
     }
     this.timeout = window.setTimeout(() => {
       this.fetchToken(refreshToken, true)
-        .then(({ refresh_token: newRefreshToken, expires_in: expiresIn }) => {
+        .then(({ refresh_token: newRefreshToken, expires_at: expiresAt }) => {
           const now = new Date().getTime()
-          const expiresAt = now + (expiresIn - refreshSlack) * 1000
+          expiresAt -= (refreshSlack * 1000);
+          // const expiresAt = now + (expiresIn - refreshSlack) * 1000
           const timeout = expiresAt - now
           if (timeout > 0) {
             this.armRefreshTimer(newRefreshToken, timeout)
@@ -255,12 +258,13 @@ export class AuthService<TIDToken = JWTIDToken> {
     if (!authTokens) {
       return
     }
-    const { refresh_token: refreshToken, expires_in: expiresIn } = authTokens
-    if (!expiresIn || !refreshToken) {
+    let { refresh_token: refreshToken, expires_at: expiresAt } = authTokens
+    if (!expiresAt || !refreshToken) {
       return
     }
     const now = new Date().getTime()
-    const expiresAt = now + (expiresIn - refreshSlack) * 1000
+    expiresAt -= (refreshSlack * 1000);
+    // const expiresAt = now + (expiresIn - refreshSlack) * 1000
     const timeout = expiresAt - now
     if (timeout > 0) {
       this.armRefreshTimer(refreshToken, timeout)
